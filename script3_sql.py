@@ -1,11 +1,13 @@
 import asyncio
+import dotenv 
+import os
 from libsql_client import create_client
 
 class DatabaseConnector:
     def __init__(self):
         self.client = create_client(
-            url="libsql://pwman-iminurcomputer.turso.io",
-            auth_token="eyJhbGciOiJFZERTQSIsInR5cCI6IkpXVCJ9.eyJpYXQiOjE3MzgwMjcxNjksImlkIjoiYWEzMzcyNGQtZGU2YS00MDM3LTk0NGQtNzc3MTA2YjZlYzg4In0.oTFM3iGcGurQXXzwO8N9i26tQptXW_1vkXl-C3yc8c-X5ZH2j5W9aArhC7uGjA1RBWZ_Ki2RxW2Ks2K0qu0ODw"
+            url= os.getenv('TURSO_URL'),
+            auth_token = os.getenv('TURSO_AUTH_TOKEN')
         )
         self.loop = asyncio.get_event_loop()
 
