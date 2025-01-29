@@ -1,19 +1,37 @@
 import asyncio
 import dotenv 
+from dotenv import load_dotenv
 import os
 from libsql_client import create_client
+from aiohttp import ClientError
+
 
 class DatabaseConnector:
     def __init__(self):
+        load_dotenv()
+        db_url = os.getenv('TURSO_DATABASE_URL').replace('libsql://', 'https://')
         self.client = create_client(
-            url= os.getenv('TURSO_URL'),
-            auth_token = os.getenv('TURSO_AUTH_TOKEN')
+            url=db_url,
+            auth_token=os.getenv('TURSO_AUTH_TOKEN')
+    )
+    async def execute_with_retry(self, query, params=None, max_retries=3):
+        for attempt in range(max_retries):
+            try:
+                return await self.client.execute(query, params)
+            except ClientError:
+                if attempt == max_retries - 1:
+                    raise
+                await asyncio.sleep(1 * (attempt + 1))
+
+    async def store_site(self, username, site_name, encrypted_username, encrypted_password):
+        return await self.execute_with_retry(
+            "INSERT INTO site (uname, site_name, username, passw) VALUES (?, ?, ?, ?)",
+            [username, site_name, encrypted_username, encrypted_password]
         )
-        self.loop = asyncio.get_event_loop()
 
     async def check_username_exists(self, username):
-        result = await self.client.execute("SELECT 1 FROM users WHERE uname = ?", [username])
-        return len(result.rows) > 0
+        result = await self.client.execute("SELECT COUNT(*) FROM users WHERE uname = ?", [username])
+        return result.rows[0][0] > 0
 
     async def create_user_with_pin(self, username, password_hash, pin_hash):
         await self.client.execute(
@@ -43,12 +61,6 @@ class DatabaseConnector:
         await self.client.execute(
             "UPDATE users SET pass = ? WHERE uname = ?",
             [new_password_hash, username]
-        )
-
-    async def store_site(self, username, site_name, encrypted_username, encrypted_password):
-        await self.client.execute(
-            "INSERT INTO site (uname, site_name, username, passw) VALUES (?, ?, ?, ?)",
-            [username, site_name, encrypted_username, encrypted_password]
         )
 
     async def get_site_credentials(self, username, site_name):
