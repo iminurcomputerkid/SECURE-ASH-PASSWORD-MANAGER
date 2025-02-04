@@ -99,3 +99,66 @@ class DatabaseConnector:
 
     async def close(self):
         await self.client.close()
+    async def store_doc(self, username, encrypted_name, encrypted_contents):
+        # Check for existing doc name
+        check_query = """
+            SELECT doc_name FROM secure_docs 
+            WHERE uname = ? AND doc_name = ?
+        """
+        existing = await self.execute_with_retry(check_query, [username, encrypted_name])
+        
+        if existing and len(existing.rows) > 0:
+            raise ValueError("Document name already exists")
+        
+        # Check if limit of 10 docs is reached
+        count_query = """
+            SELECT COUNT(*) FROM secure_docs 
+            WHERE uname = ?
+        """
+        count = await self.execute_with_retry(count_query, [username])
+        if count.rows[0][0] >= 10:
+            raise ValueError("Maximum limit of 10 documents reached")
+        
+        # Insert new doc
+        insert_query = """
+            INSERT INTO secure_docs (uname, doc_name, doc_contents)
+            VALUES (?, ?, ?)
+        """
+        await self.execute_with_retry(insert_query, [username, encrypted_name, encrypted_contents])
+
+    async def get_doc(self, username, doc_name):
+        query = """
+            SELECT doc_name, doc_contents
+            FROM secure_docs
+            WHERE uname = ? AND doc_name = ?
+        """
+        result = await self.execute_with_retry(query, [username, doc_name])
+        return (result.rows[0][0], result.rows[0][1]) if result.rows else None
+
+    async def get_all_docs(self, username):
+        query = """
+            SELECT doc_name 
+            FROM secure_docs 
+            WHERE uname = ?
+        """
+        result = await self.execute_with_retry(query, [username])
+        return [row[0] for row in result.rows]
+
+    async def update_doc(self, username, doc_name, new_contents):
+        query = """
+            UPDATE secure_docs 
+            SET doc_contents = ?
+            WHERE uname = ? AND doc_name = ?
+        """
+        await self.execute_with_retry(query, [new_contents, username, doc_name])
+
+    async def delete_doc(self, username, doc_name):
+        query = """
+            DELETE FROM secure_docs 
+            WHERE uname = ? AND doc_name = ?
+        """
+        await self.execute_with_retry(query, [username, doc_name])
+
+
+
+
