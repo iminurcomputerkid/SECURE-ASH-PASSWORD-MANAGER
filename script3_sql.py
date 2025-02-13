@@ -99,13 +99,13 @@ class DatabaseConnector:
 
     async def close(self):
         await self.client.close()
-    async def store_doc(self, username, encrypted_name, encrypted_contents):
+    async def store_doc(self, username, doc_name, encrypted_contents):
         # Check for existing doc name
         check_query = """
             SELECT doc_name FROM secure_docs 
             WHERE uname = ? AND doc_name = ?
         """
-        existing = await self.execute_with_retry(check_query, [username, encrypted_name])
+        existing = await self.execute_with_retry(check_query, [username, doc_name])
         
         if existing and len(existing.rows) > 0:
             raise ValueError("Document name already exists")
@@ -124,7 +124,7 @@ class DatabaseConnector:
             INSERT INTO secure_docs (uname, doc_name, doc_contents)
             VALUES (?, ?, ?)
         """
-        await self.execute_with_retry(insert_query, [username, encrypted_name, encrypted_contents])
+        await self.execute_with_retry(insert_query, [username, doc_name, encrypted_contents])
 
     async def get_doc(self, username, doc_name):
         query = """
@@ -158,6 +158,8 @@ class DatabaseConnector:
             WHERE uname = ? AND doc_name = ?
         """
         await self.execute_with_retry(query, [username, doc_name])
+
+
 
 
 

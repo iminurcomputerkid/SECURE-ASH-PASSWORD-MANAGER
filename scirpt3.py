@@ -7,6 +7,7 @@ from argon2.exceptions import VerifyMismatchError
 from getpass import getpass
 import asyncio
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+import os
 
 class DynamicPasswordManager:
     def __init__(self, username):
@@ -42,35 +43,41 @@ class DynamicPasswordManager:
         await self.db.update_master_password(self.username, hash_value)
 
     async def verify_master_password(self, master_password):
-        stored_pass = await self.db.get_user_password(self.username)
-        if not stored_pass:
-            if await self.db.check_username_exists(self.username):
-                print(f"Username '{self.username}' is already taken.")
-                return False
-            
-            hash_value = await self.create_key(master_password)
-            await self.db.create_user(self.username, hash_value)
-            print(f"New user '{self.username}' created successfully!")
-            return True
-            
         try:
+            stored_pass = await self.db.get_user_password(self.username)
+            if not stored_pass:
+                print(f"Invalid username or password for inputted user")
+                return False
+                
             return self.ph.verify(stored_pass, master_password)
-        except VerifyMismatchError:
+        except AttributeError:
+            print(f"\nLogin failed")
             return False
-
+        except Exception as e:
+            print(f"\nLogin failed")
+            return False
+        
     async def load_key(self, master_password):
-        if not await self.verify_master_password(master_password):
-            raise ValueError("Invalid master password")
-    
-        salt = b'salt_'
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
-            salt=salt,
-            iterations=100000,
-        )
-        key = base64.urlsafe_b64encode(kdf.derive(master_password.encode()))
-        self.fer = Fernet(key)
+        try:
+            if not await self.verify_master_password(master_password):
+                raise ValueError("Invalid master password")
+        
+            salt = os.urandom(16)
+            kdf = PBKDF2HMAC(
+                algorithm=hashes.SHA256(),
+                length=32,
+                salt=salt,
+                iterations=100000,
+            )
+
+            key = base64.urlsafe_b64encode(kdf.derive(master_password.encode()))
+            self.fer = Fernet(key)
+        except ValueError as e:
+            print(f"\n{str(e)}")
+            raise
+        except Exception as e:
+            print("\nError during key generation")
+            raise
 
     async def add_credentials(self, site, username, password):
         username = '' if username == '0' else username
@@ -125,33 +132,33 @@ class DynamicPasswordManager:
         await self.db.delete_user_data(self.username)
 
     async def add_secure_doc(self, doc_name, doc_contents):
-        encrypted_name = self.fer.encrypt(doc_name.encode())
-        encrypted_contents = self.fer.encrypt(doc_contents.encode())
-        await self.db.store_doc(self.username, encrypted_name, encrypted_contents)
+        encrypted_contents = self.fer.encrypt(doc_contents.encode()).decode()
+        await self.db.store_doc(self.username, doc_name, encrypted_contents)
 
     async def get_secure_doc(self, doc_name, master_password):
-       ## if not await self.verify_master_password(master_password):
-           ## raise ValueError("Invalid master password")
         result = await self.db.get_doc(self.username, doc_name)
         if result:
-            decrypted_name = self.fer.decrypt((result[0]).decode())
-            decrypted_contents = self.fer.decrypt((result[1]).decode())
-            return {
-                "name": decrypted_name,
-                "contents": decrypted_contents
-            }
+            try:
+                decrypted_contents = self.fer.decrypt(result[1].encode()).decode()
+                return {
+                    "name": doc_name,
+                    "contents": decrypted_contents
+                }
+            except Exception as e:
+                print(f"Decryption error: {str(e)}")
         return None
-    
+        
     async def get_all_docs(self):
         encrypted_docs = await self.db.get_all_docs(self.username)
-        decrypted_docs = []
+        docs = []
         for doc in encrypted_docs:
             try:
-                decrypted_name = self.fer.decrypt((doc.encode()).decode())
-                decrypted_docs.append(decrypted_name)
+                if isinstance(doc, bytes):
+                    doc = doc.decode()
+                docs.append(doc)
             except:
                 continue
-        return decrypted_docs
+        return docs
 
     
     async def update_secure_doc(self, doc_name, new_contents, master_password):
@@ -307,13 +314,13 @@ async def main():
                         if doc_contents is None:
                              continue
                         await pm.add_secure_doc(doc_name, doc_contents)
-                        print("Secure note added successfully!")
+                        print("Note added successfully!")
 
                     elif choice == '8':
                         doc_name = await get_secure_input("Enter doc name:")
                         if doc_name is None:
                             continue
-                        doc = await pm.get_secure_doc(username, doc_name)
+                        doc = await pm.get_secure_doc(doc_name, master_password)
                         if doc:
                             print(f"\nDoc Name: {doc['name']}")
                             print(f"Contents: {doc['contents']}")
