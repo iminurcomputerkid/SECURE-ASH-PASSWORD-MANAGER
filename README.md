@@ -1,4 +1,4 @@
-__________________SECURE ASF PASSW MAN 🔐__________________
+__________________SECURE ASF PASSWORD MANAGER 🔐__________________
 
 (CURRENTLY BETA, REACH OUT TO ME FOR AUTHENTICATION TOKEN TO ACCESS RESTRICTED DB: https://www.linkedin.com/in/julien-niles-83926a308/)
 A Python-based password manager that encrypts credentials and securely stores them in a Turso DB.
