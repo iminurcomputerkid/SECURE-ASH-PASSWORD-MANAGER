@@ -35,9 +35,23 @@ class DatabaseConnector:
 
     async def create_user_with_pin(self, username, password_hash, pin_hash):
         await self.client.execute(
-            "INSERT INTO users (uname, pass, secret_pin) VALUES (?, ?, ?)",
+            "INSERT INTO users (uname, pass, secret_pin, salt_phrase) VALUES (?, ?, ?, '')",
             [username, password_hash, pin_hash]
         )
+    
+    async def store_user_salt(self, username, salt):
+        await self.execute_with_retry(
+            "UPDATE users SET salt_phrase = ? WHERE uname = ?",
+            [salt.hex(), username]
+        )
+
+    async def get_user_salt(self, username):
+        result = await self.execute_with_retry(
+            "SELECT salt_phrase FROM users WHERE uname = ?", 
+            [username]
+        )
+        salt_hex = result.rows[0][0] if result.rows else None
+        return bytes.fromhex(salt_hex) if salt_hex else None
 
     async def create_user(self, username, password_hash):
         await self.client.execute(
@@ -54,14 +68,14 @@ class DatabaseConnector:
             return None
 
     async def get_recovery_pin(self, username):
-        result = await self.client.execute("SELECT secret_pin FROM users WHERE uname = ?", [username])
+        query = "SELECT secret_pin FROM users WHERE uname = ?"
+        result = await self.execute_with_retry(query, [username])
         return result.rows[0][0] if result.rows else None
 
     async def update_master_password(self, username, new_password_hash):
-        await self.client.execute(
-            "UPDATE users SET pass = ? WHERE uname = ?",
-            [new_password_hash, username]
-        )
+        query = """ UPDATE users SET pass = ? WHERE uname = ?"""
+        return await self.execute_with_retry(query, [new_password_hash, username])
+
 
     async def get_site_credentials(self, username, site_name):
         result = await self.client.execute(
@@ -79,26 +93,28 @@ class DatabaseConnector:
         )
 
     async def get_wallet(self, username, wallet_name):
-        result = await self.client.execute(
-            """SELECT username, passw, recover_phrase 
-               FROM wallets WHERE uname = ? AND wallet_name = ?""",
-            [username, wallet_name]
-        )
+        query = """SELECT username, passw, recover_phrase 
+               FROM wallets WHERE uname = ? AND wallet_name = ?"""
+        result = await self.execute_with_retry(query, [username, wallet_name])
         return result.rows[0] if result.rows else None
 
     async def delete_user_data(self, username):
-        await self.client.execute("DELETE FROM users WHERE uname = ?", [username])
+        await self.execute_with_retry("DELETE FROM site WHERE uname = ?", [username])
+        await self.execute_with_retry("DELETE FROM wallets WHERE uname = ?", [username])
+        await self.execute_with_retry("DELETE FROM secure_docs WHERE uname = ?", [username])
 
     async def get_all_sites(self, username):
         result = await self.client.execute("SELECT site_name FROM site WHERE uname = ?", [username])
         return [row[0] for row in result.rows]
 
     async def get_all_wallets(self, username):
-        result = await self.client.execute("SELECT wallet_name FROM wallets WHERE uname = ?", [username])
+        query = "SELECT wallet_name FROM wallets WHERE uname = ?"
+        result = await self.execute_with_retry(query, [username])
         return [row[0] for row in result.rows]
 
     async def close(self):
         await self.client.close()
+
     async def store_doc(self, username, doc_name, encrypted_contents):
         # Check for existing doc name
         check_query = """
@@ -150,7 +166,8 @@ class DatabaseConnector:
             SET doc_contents = ?
             WHERE uname = ? AND doc_name = ?
         """
-        await self.execute_with_retry(query, [new_contents, username, doc_name])
+        result = await self.execute_with_retry(query, [new_contents, username, doc_name])
+        return result
 
     async def delete_doc(self, username, doc_name):
         query = """
