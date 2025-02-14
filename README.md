@@ -1,4 +1,5 @@
 SECURE ASF PASSW MAN 🔐 (CURRENTLY BETA, REACH OUT TO ME FOR AUTHENTICATION TOKEN FOR ACCESSING RESTRICTED DB: https://www.linkedin.com/in/julien-niles-83926a308/)
+
 A Python-based password manager that encrypts credentials and securely stores them in a Turso DB.
 
 Features:
@@ -34,4 +35,4 @@ d. Run the program:
 
 For PowerShell/WSL: ./run_pwman.bat
 For CMD: run_pwman.bat
-Enjoy using SECURE ASF PASSW MAN!
+
