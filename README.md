@@ -6,7 +6,7 @@ A Python-based password manager that encrypts credentials and securely stores th
 
 __________________Key Features__________________
 
-Encryption: Uses Argon2, PBKDF2, and a Fernet cipher to securely encrypt credentials + randomly generates unique salt phrase for each user 
+Encryption: Uses Argon2, PBKDF2, and a Fernet cipher to securely encrypt credentials + randomly generates unique salt phrase for each user.
 
 Easy Installation: Install dependencies with simple commands.
 
