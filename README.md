@@ -1,1 +1,37 @@
-``` git clone https://github.com/YOUR-USERNAME/SECURE-ASF-PASSW-MAN.git cd SECURE-ASF-PASSW-MAN pip install -r requirements.yml ### 3. (Optional) Batch Execution Setup #### a. Create a Batch File In your repo folder, create a file named `run_pwman.bat` with the following content: @echo off REM SECURE ASF PASSW MAN Batch Execution python script3.py pause #### b. Move the Batch File to a Directory in Your PATH For example, if you have a bin folder at `C:\Users\YourUsername\bin`, run: mv run_pwman.bat C:\Users\YourUsername\bin #### c. (If Needed) Set Execute Permissions On Unix-like systems, you may need to set the execute permissions: chmod +x /path/to/your/bin/run_pwman.bat #### d. Run the Program - **PowerShell / WSL:** ./run_pwman.bat - **CMD:** run_pwman.bat --- Enjoy using SECURE ASF PASSW MAN!
+SECURE ASF PASSW MAN 🔐 (CURRENTLY BETA, REACH OUT TO ME FOR AUTHENTICATION TOKEN FOR ACCESSING RESTRICTED DB: https://www.linkedin.com/in/julien-niles-83926a308/)
+A Python-based password manager that encrypts credentials and securely stores them in a Turso DB.
+
+Features:
+
+Encryption: Uses Argon2, PBKDF2, and a Fernet cipher to securely encrypt credentials + randomly generates unique salt phrase for each user 
+Easy Installation: Install dependencies with simple commands.
+Flexible Execution: Run via VSCode, terminal batch execution, or other IDEs.
+Installation:
+
+Clone the repository:
+git clone https://github.com/iminurcomputerkid/SECURE-ASF-PASSW-MAN.git
+cd SECURE-ASF-PASSW-MAN
+
+Install Dependencies:
+pip install -r requirements.yml
+
+(Optional) Batch Execution Setup:
+a. Create a batch file:
+In your repo folder, create a file named 'run_pwman.bat' with the following content:
+
+@echo off
+REM SECURE ASF PASSW MAN Batch Execution
+python script3.py
+pause
+
+b. Move the batch file to a directory in your PATH (e.g., C:\Users\YourUsername\bin):
+mv run_pwman.bat C:\Users\YourUsername\bin
+
+c. (If needed) Set execute permissions on Unix-like systems:
+chmod +x /path/to/your/bin/run_pwman.bat
+
+d. Run the program:
+
+For PowerShell/WSL: ./run_pwman.bat
+For CMD: run_pwman.bat
+Enjoy using SECURE ASF PASSW MAN!
