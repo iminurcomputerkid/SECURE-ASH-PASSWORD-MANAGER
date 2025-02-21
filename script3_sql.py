@@ -1,5 +1,6 @@
 import asyncio
 import dotenv 
+import time
 from dotenv import load_dotenv
 import os
 from libsql_client import create_client
@@ -30,7 +31,57 @@ class DatabaseConnector:
         except Exception as e:
             print(f"Error in execute_with_retry: {e}")
             raise
+    async def get_lockout_data(self, username):
+        try:
+            result = await self.execute_with_retry(
+                "SELECT failed_attempts, lockout_until FROM users WHERE uname = ?",
+                [username]
+            )
+            if result.rows:
+                row = result.rows[0]
+                return {
+                    'failed_attempts': row[0],
+                    'lockout_until': row[1]
+                }
+            else:
+                return {'failed attempts': 0, 'lockout until': 0}
+        except Exception as e:
+            print(f"Error with lockout data: {e}")
+            return {'failed attempts': 0, 'lockout until': 0}
+    async def set_lockout_data(self, username, failed_attempts, lockout_until):
+        """
+        Updates the failed_attempts and lockout_until columns for the user.
+        """
+        try:
+            await self.execute_with_retry(
+                """
+                UPDATE users
+                SET failed_attempts = ?,
+                    lockout_until   = ?
+                WHERE uname = ?
+                """,
+                [failed_attempts, lockout_until, username]
+            )
+        except Exception as e:
+            print(f"Error in set_lockout_data: {e}")
 
+    async def reset_lockout_data(self, username):
+        """
+        Resets failed_attempts and lockout_until after a successful login.
+        """
+        try:
+            await self.execute_with_retry(
+                """
+                UPDATE users
+                SET failed_attempts = 0,
+                    lockout_until   = 0
+                WHERE uname = ?
+                """,
+                [username]
+            )
+        except Exception as e:
+            print(f"Error in reset_lockout_data: {e}")
+            
     async def store_site(self, username, site_name, encrypted_username, encrypted_password):
         try:
             return await self.execute_with_retry(

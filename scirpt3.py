@@ -8,6 +8,8 @@ from getpass import getpass
 import asyncio
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 import os
+import secrets
+import string
 
 class DynamicPasswordManager:
     def __init__(self, username):
@@ -30,6 +32,10 @@ class DynamicPasswordManager:
         pin_hash = self.ph.hash(recovery_pin)
         await self.db.create_user_with_pin(self.username, hash_value, pin_hash)
         await self.db.store_user_salt(self.username, user_salt)
+    
+    def generate_secure_password(length=25):
+        alphabet = string.ascii_letters + string.digits + string.punctuation
+        return ''.join(secrets.choice(alphabet) for _ in range(length))
 
     async def verify_recovery_pin(self, recovery_pin):
         stored_pin = await self.db.get_recovery_pin(self.username)
@@ -59,17 +65,48 @@ class DynamicPasswordManager:
 
     async def verify_master_password(self, master_password):
         try:
+            lockout_data = await self.db.get_lockout_data(self.username)
+            failed_attempts = lockout_data['failed_attempts']
+            lockout_until   = lockout_data['lockout_until']
+            current_time = int(time.time())  # current Unix timestamp (seconds)
+
+            if current_time < lockout_until:
+                remaining = lockout_until - current_time
+                print(f"\n[!] User is locked out. Try again in ~{remaining} seconds.")
+                return False
+
             stored_pass = await self.db.get_user_password(self.username)
             if not stored_pass:
-                print(f"Invalid username or password for inputted user")
+                print(f"Invalid username or password for user: {self.username}")
                 return False
-            return self.ph.verify(stored_pass, master_password)
-        except AttributeError:
-            print(f"\nLogin failed")
+
+            self.ph.verify(stored_pass, master_password)
+
+            await self.db.reset_lockout_data(self.username)
+            return True
+
+        except VerifyMismatchError:
+            print("\n[!] Incorrect master password.")
+            await self.increment_login_failure()
             return False
-        except Exception:
-            print(f"\nLogin failed")
+        except Exception as e:
+            print(f"\n[!] Login failed: {e}")
             return False
+
+
+
+    async def inc_login_failure(self):
+        lockout_data = await self.db.get_lockout_data(self.username)
+        failed_attempts = lockout_data['failed_attempts'] + 1
+        current_time = int(time.time())
+        lockout_until = 0
+
+        if failed_attempts >= 5:
+            lockout_duration_minutes = 3 * (2 ** (failed_attempts - 5))
+            lockout_until = current_time + (lockout_duration_minutes * 60)
+            print(f"[!] User locked out for {lockout_duration_minutes} minutes.")
+
+        await self.db.set_lockout_data(self.username, failed_attempts, lockout_until)
 
     async def load_key(self, master_password):
         try:
@@ -96,7 +133,14 @@ class DynamicPasswordManager:
     async def add_credentials(self, site, username, password):
         try:
             username = '' if username == '0' else username
+            
+            # Check for the 'gen' keyword to generate a secure password.
+            if password.strip().lower() == "gen":
+                password = generate_secure_password()
+                print(f"[+] Generated secure password: {password}")
+            
             password = '' if password == '0' else password
+            
             encrypted_username = self.fer.encrypt(username.encode()).decode()
             encrypted_password = self.fer.encrypt(password.encode()).decode()
             await self.db.store_site(self.username, site, encrypted_username, encrypted_password)
@@ -121,14 +165,22 @@ class DynamicPasswordManager:
     async def add_wallet(self, wallet_name, username, password, recovery_phrase, master_password, pin):
         if not await self.verify_recovery_pin(pin):
             raise ValueError("Invalid PIN")
+        
         username = '' if username == '0' else username
+        
+        # Use the generator if the user types 'gen'.
+        if password.strip().lower() == "gen":
+            password = generate_secure_password()
+            print(f"[+] Generated wallet password: {password}")
+        
         password = '' if password == '0' else password
         recovery_phrase = '' if recovery_phrase == '0' else recovery_phrase
+        
         encrypted_username = self.fer.encrypt(username.encode()).decode()
         encrypted_password = self.fer.encrypt(password.encode()).decode()
         encrypted_recovery = self.fer.encrypt(recovery_phrase.encode()).decode()
         await self.db.store_wallet(self.username, wallet_name, encrypted_username,
-                                   encrypted_password, encrypted_recovery)
+                                encrypted_password, encrypted_recovery)
 
     async def get_wallet(self, wallet_name, master_password, pin):
         if not await self.verify_recovery_pin(pin):
@@ -257,7 +309,8 @@ async def main():
                                     if w_username is None:
                                         continue
                                     print("If no password exists, enter '0'")
-                                    w_password = await get_secure_input("Enter password:", is_password=True)
+                                    w_password = await get_secure_input("Enter password (or type 'gen' to auto-generate):", is_password=True)
+
                                     if w_password is None:
                                         continue
                                     print("If no recovery phrase exists, enter '0'")
@@ -320,7 +373,7 @@ async def main():
                                     if s_username is None:
                                         continue
                                     print("If no password exists, enter '0'")
-                                    s_password = await get_secure_input("Enter password:", is_password=True)
+                                    s_password = await get_secure_input("Enter password (or type 'gen' to auto-generate):", is_password=True)
                                     if s_password is None:
                                         continue
                                     success = await pm.add_credentials(site, s_username, s_password)
