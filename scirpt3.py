@@ -12,6 +12,7 @@ import secrets
 import time
 import string
 import pyotp
+import pyqrcode
 
 class DynamicPasswordManager:
     def __init__(self, username):
@@ -106,8 +107,10 @@ class DynamicPasswordManager:
         await self.db.set_totp_secret(self.username, totp_secret)
         totp = pyotp.TOTP(totp_secret)
         uri = totp.provisioning_uri(name=self.username, issuer_name="SecureASF")
+        qr = pyqrcode.create(uri)
+        qr.png("2fa.png", scale=4)
+        print("QR code saved as 2fa.png, scan with phone to add to authenticator app")
         print("Scan this QR code URL with your Microsoft Authenticator app:")
-        print(uri)
         print("Or manually enter this secret:", totp_secret)
 
     async def disable_2fa(self):
