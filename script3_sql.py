@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import os
 from libsql_client import create_client
 from aiohttp import ClientError
+import pyotp
 
 
 class DatabaseConnector:
@@ -31,6 +32,7 @@ class DatabaseConnector:
         except Exception as e:
             print(f"Error in execute_with_retry: {e}")
             raise
+
     async def get_lockout_data(self, username):
         try:
             result = await self.execute_with_retry(
@@ -44,14 +46,11 @@ class DatabaseConnector:
                     'lockout_until': row[1]
                 }
             else:
-                return {'failed attempts': 0, 'lockout until': 0}
+                return {'failed_attempts': 0, 'lockout_until': 0}
         except Exception as e:
             print(f"Error with lockout data: {e}")
             return {'failed attempts': 0, 'lockout until': 0}
     async def set_lockout_data(self, username, failed_attempts, lockout_until):
-        """
-        Updates the failed_attempts and lockout_until columns for the user.
-        """
         try:
             await self.execute_with_retry(
                 """
@@ -66,9 +65,6 @@ class DatabaseConnector:
             print(f"Error in set_lockout_data: {e}")
 
     async def reset_lockout_data(self, username):
-        """
-        Resets failed_attempts and lockout_until after a successful login.
-        """
         try:
             await self.execute_with_retry(
                 """
@@ -81,6 +77,35 @@ class DatabaseConnector:
             )
         except Exception as e:
             print(f"Error in reset_lockout_data: {e}")
+
+    async def get_totp_secret(self, username):
+        try:
+            result = await self.execute_with_retry(
+                "SELECT totp_secret FROM users WHERE uname = ?",
+                [username]
+            )
+            return result.rows[0][0] if result.rows and result.rows[0][0] else ""
+        except Exception as e:
+            print(f"Error getting totp_secret: {e}")
+            return ""
+
+    async def set_totp_secret(self, username, totp_secret):
+        try:
+            await self.execute_with_retry(
+                "UPDATE users SET totp_secret = ? WHERE uname = ?",
+                [totp_secret, username]
+            )
+        except Exception as e:
+            print(f"Error setting totp_secret: {e}")
+
+    async def delete_totp_secret(self, username):
+        try:
+            await self.execute_with_retry(
+                "UPDATE users SET totp_secret = '' WHERE uname = ?",
+                [username]
+            )
+        except Exception as e:
+            print(f"Error deleting totp_secret: {e}")
             
     async def store_site(self, username, site_name, encrypted_username, encrypted_password):
         try:

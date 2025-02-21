@@ -11,6 +11,7 @@ import os
 import secrets
 import time
 import string
+import pyotp
 
 class DynamicPasswordManager:
     def __init__(self, username):
@@ -83,17 +84,47 @@ class DynamicPasswordManager:
                 return False
 
             self.ph.verify(stored_pass, master_password)
+
+            totp_secret = await self.db.get_totp_secret(self.username)
+            if totp_secret != "":
+                if not await self.verify_2fa():
+                    return False
+                    
             await self.db.reset_lockout_data(self.username)
             return True
 
         except VerifyMismatchError:
             await self.inc_login_failure()
+            print("\nError")
             return False
         except Exception as e:
             print(f"\nLogin failed: {e}")
             return False
 
+    async def enable_2fa(self):
+        totp_secret = pyotp.random_base32()
+        await self.db.set_totp_secret(self.username, totp_secret)
+        totp = pyotp.TOTP(totp_secret)
+        uri = totp.provisioning_uri(name=self.username, issuer_name="SecureASF")
+        print("Scan this QR code URL with your Microsoft Authenticator app:")
+        print(uri)
+        print("Or manually enter this secret:", totp_secret)
 
+    async def disable_2fa(self):
+        await self.db.delete_totp_secret(self.username)
+        print("2FA has been disabled.")
+
+    async def verify_2fa(self):
+        totp_secret = await self.db.get_totp_secret(self.username)
+        if totp_secret == "":
+            return True  #2FA not enabled so no verification needed
+        code = await get_secure_input("Enter the 2FA code from your authenticator app:", is_password=False)
+        totp = pyotp.TOTP(totp_secret)
+        if totp.verify(code):
+            return True
+        else:
+            print("Invalid 2FA code.")
+            return False
 
     async def inc_login_failure(self):
         lockout_data = await self.db.get_lockout_data(self.username)
@@ -485,9 +516,9 @@ async def main():
                                 while True:
                                     print("\n=== ACCOUNT SETTINGS ===")
                                     print("1. Change Master Password")
-                                    print("2. Delete All Data")
-                                    print("3. Return to Main Menu")
-
+                                    print("2. 2FA Settings")
+                                    print("3. Delete All Data")
+                                    print("4. Return to Main Menu")
                                     settings_choice = input("\nEnter your choice: ")
 
                                     if settings_choice == '1':
@@ -505,6 +536,22 @@ async def main():
                                         break
 
                                     elif settings_choice == '2':
+                                        while True:
+                                            print("\n=== 2FA SETTINGS ===")
+                                            print("1. Enable 2FA")
+                                            print("2. Disable 2FA")
+                                            print("3. Return to Account Settings")
+                                            twofa_choice = input("\nEnter your choice: ")
+                                            if twofa_choice == '1':
+                                                await pm.enable_2fa()
+                                            elif twofa_choice == '2':
+                                                await pm.disable_2fa()
+                                            elif twofa_choice == '3':
+                                                break
+                                            else:
+                                                print("Invalid choice, please try again.")
+
+                                    elif settings_choice == '3':
                                         print("\nWARNING: This action will permanently delete all your stored data.")
                                         pin_confirm = await get_secure_input("Enter recovery PIN:", is_password=True)
                                         if pin_confirm is None:
@@ -517,8 +564,11 @@ async def main():
                                             print(f"Error: {e}")
                                             return
 
-                                    elif settings_choice == '3':
+                                    elif settings_choice == '4':
                                         break
+
+                                    else:
+                                        print("Invalid choice, try again.")
 
                             elif choice == '5':
                                 break
