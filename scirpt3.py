@@ -4,6 +4,7 @@ import base64
 from cryptography.hazmat.primitives import hashes
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
+from argon2.low_level import hash_secret_raw, Type
 from getpass import getpass
 import asyncio
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -58,13 +59,16 @@ class DynamicPasswordManager:
             user_salt = os.urandom(16)
             await self.db.store_user_salt(self.username, user_salt)
 
-        kdf = PBKDF2HMAC(
-            algorithm=hashes.SHA256(),
-            length=32,
+        kdf = hash_secret_raw(
+            secret=new_password.encode(),
             salt=user_salt,
-            iterations=100000,
+            time_cost = 2,
+            memory_cost = 102400,
+            parallelism=8,
+            hash_len=32,
+            type=Type.ID
         )
-        key = base64.urlsafe_b64encode(kdf.derive(new_password.encode()))
+        key = base64.urlsafe_b64encode(kdf)
         self.fer = Fernet(key)
 
     async def verify_master_password(self, master_password):
@@ -168,7 +172,7 @@ class DynamicPasswordManager:
         try:
             username = '' if username == '0' else username
             
-            # Check for the 'gen' keyword to generate a secure password.
+            #Check for keyword 'gen' to generate secure password.
             if password.strip().lower() == "gen":
                 password = DynamicPasswordManager.generate_secure_password()
                 print(f"succesfully generated secure password: {password}")
@@ -202,7 +206,7 @@ class DynamicPasswordManager:
         
         username = '' if username == '0' else username
         
-        # Use the generator if the user types 'gen'.
+        #Store 'gen' password if selected by the user
         if password.strip().lower() == "gen":
             password = DynamicPasswordManager.generate_secure_password()
             print(f" wallet password generated: {password}")
@@ -291,7 +295,8 @@ async def get_secure_input(prompt, is_password=False):
             return None
         if user_input:
             return user_input
-
+        
+#Menu options
 async def main():
         print("Welcome to SECURE ASF Password Manager!")
         while True:
