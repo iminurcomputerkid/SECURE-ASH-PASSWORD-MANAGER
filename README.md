@@ -12,7 +12,7 @@ Easy Installation: Install dependencies with simple commands.
 
 Flexible Execution: Run via VSCode, terminal batch execution, or other IDEs.
 
-__________________Installation__________________
+__________________Installation__________________(INSTRUCTIONS NEED REVISION)
 
 Clone the repository:
 
