@@ -149,18 +149,23 @@ class DynamicPasswordManager:
     async def load_key(self, master_password):
         try:
             if not await self.verify_master_password(master_password):
-                raise ValueError("Invalid master password")
+                raise ValueError("Entry Invalidated")
             user_salt = await self.db.get_user_salt(self.username)
             if not user_salt:
                 raise ValueError("User salt not found")
-            kdf = PBKDF2HMAC(
-                algorithm=hashes.SHA256(),
-                length=32,
-                salt=user_salt,
-                iterations=100000,
+            
+            kdf = hash_secret_raw(
+            secret=master_password.encode(),
+            salt=user_salt,
+            time_cost = 2,
+            memory_cost = 102400,
+            parallelism=8,
+            hash_len=32,
+            type=Type.ID
             )
-            key = base64.urlsafe_b64encode(kdf.derive(master_password.encode()))
+            key = base64.urlsafe_b64encode(kdf)
             self.fer = Fernet(key)
+
         except ValueError as e:
             print(f"\n{str(e)}")
             raise
