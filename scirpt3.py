@@ -1,7 +1,8 @@
 import requests
 import getpass
 
-# Update this to point to your deployed API URL (or use "http://localhost:8000" for testing)
+#please work
+
 API_URL = "https://secure-asf-password-manager.onrender.com"
 
 def get_secure_input(prompt, is_password=False):
@@ -81,7 +82,6 @@ def login():
         return None, None
 
 def recover_account():
-    # For simplicity, we assume the recover account endpoint works similar to resetting password.
     print("\n=== SECURE ASF PASSW MANAGER ===")
     print("Recover Account")
     username = get_secure_input("Enter username:")
@@ -95,7 +95,6 @@ def recover_account():
         "recovery_pin": recovery_pin
     }
     try:
-        # We assume your API uses /reset_master_password after verifying PIN in a recovery flow.
         new_password = get_secure_input("Enter new master password:", is_password=True)
         if new_password is None:
             return
