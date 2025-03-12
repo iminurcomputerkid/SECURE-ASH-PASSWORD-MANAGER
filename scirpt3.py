@@ -1,8 +1,6 @@
 import requests
 import getpass
 
-#please work
-
 API_URL = "https://secure-asf-password-manager.onrender.com"
 
 def get_secure_input(prompt, is_password=False):
@@ -15,6 +13,15 @@ def get_secure_input(prompt, is_password=False):
             return None
         if user_input:
             return user_input
+        
+def make_secure_request(method, endpoint, **kwargs):
+    verify_ssl = True
+    return requests.request(
+        method,
+        f"{API_URL}/{endpoint}",
+        verify=verify_ssl,
+        **kwargs
+    )
 
 def register_account():
     print("\n=== SECURE ASF PASSW MANAGER ===")
