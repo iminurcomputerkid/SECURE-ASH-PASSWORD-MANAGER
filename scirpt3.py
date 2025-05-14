@@ -1,5 +1,6 @@
 import requests
 import getpass
+from requests.exceptions import HTTPError
 
 API_URL = "https://secure-asf-password-manager.onrender.com"
 
@@ -9,22 +10,13 @@ def get_secure_input(prompt, is_password=False):
             user_input = getpass.getpass(f"{prompt} (Type 'esc' to go back): ")
         else:
             user_input = input(f"{prompt} (Type 'esc' to go back): ")
-        if 'esc' in user_input.lower():
+        if user_input.lower() == 'esc':
             return None
         if user_input:
             return user_input
-        
-def make_secure_request(method, endpoint, **kwargs):
-    verify_ssl = True
-    return requests.request(
-        method,
-        f"{API_URL}/{endpoint}",
-        verify=verify_ssl,
-        **kwargs
-    )
 
 def register_account():
-    print("\n=== SECURE ASF PASSW MANAGER ===")
+    print("\n=== SECURE ASF PASSWORD MANAGER ===")
     print("Register a New Account")
     username = get_secure_input("Enter username:")
     if username is None:
@@ -50,6 +42,7 @@ def register_account():
     if recovery_pin != confirm_pin:
         print("PINs don't match!")
         return
+
     payload = {
         "username": username,
         "master_password": master_password,
@@ -59,12 +52,15 @@ def register_account():
     }
     try:
         response = requests.post(f"{API_URL}/register", json=payload)
+        response.raise_for_status()
         print(response.json())
+    except HTTPError:
+        print("Registration failed: please check your inputs or try again later.")
     except Exception as e:
         print(f"Registration error: {e}")
 
 def login():
-    print("\n=== SECURE ASF PASSW MANAGER ===")
+    print("\n=== SECURE ASF PASSWORD MANAGER ===")
     print("Login")
     username = get_secure_input("Enter username:")
     if username is None:
@@ -72,24 +68,38 @@ def login():
     master_password = get_secure_input("Enter master password:", is_password=True)
     if master_password is None:
         return None, None
+
     payload = {
         "username": username,
         "master_password": master_password
     }
+
+    # first attempt
     try:
         response = requests.post(f"{API_URL}/login", json=payload)
+        if response.status_code == 403:
+            print("Two-factor authentication required.")
+            totp_code = get_secure_input("Enter 2FA code:")
+            if totp_code is None:
+                return None, None
+            payload["totp_code"] = totp_code
+            response = requests.post(f"{API_URL}/login", json=payload)
+        response.raise_for_status()
         data = response.json()
-        print(data)
         if data.get("message", "").lower() == "login successful":
             return username, master_password
         else:
+            print("Login failed: wrong username, password, or 2FA code.")
             return None, None
+    except HTTPError:
+        print("Login failed: wrong username, password, or 2FA code.")
+        return None, None
     except Exception as e:
         print(f"Login error: {e}")
         return None, None
 
 def recover_account():
-    print("\n=== SECURE ASF PASSW MANAGER ===")
+    print("\n=== SECURE ASF PASSWORD MANAGER ===")
     print("Recover Account")
     username = get_secure_input("Enter username:")
     if username is None:
@@ -97,23 +107,28 @@ def recover_account():
     recovery_pin = get_secure_input("Enter recovery PIN:", is_password=True)
     if recovery_pin is None:
         return
+
+    new_password = get_secure_input("Enter new master password:", is_password=True)
+    if new_password is None:
+        return
+    confirm_password = get_secure_input("Confirm new master password:", is_password=True)
+    if confirm_password is None:
+        return
+    if new_password != confirm_password:
+        print("Passwords don't match!")
+        return
+
     payload = {
         "username": username,
-        "recovery_pin": recovery_pin
+        "recovery_pin": recovery_pin,
+        "new_master_password": new_password
     }
     try:
-        new_password = get_secure_input("Enter new master password:", is_password=True)
-        if new_password is None:
-            return
-        confirm_password = get_secure_input("Confirm new master password:", is_password=True)
-        if confirm_password is None:
-            return
-        if new_password != confirm_password:
-            print("Passwords don't match!")
-            return
-        payload["new_master_password"] = new_password
         response = requests.post(f"{API_URL}/reset_master_password", json=payload)
+        response.raise_for_status()
         print(response.json())
+    except HTTPError:
+        print("Account recovery failed: invalid PIN or server error.")
     except Exception as e:
         print(f"Account recovery error: {e}")
 
@@ -123,27 +138,27 @@ def wallet_menu(username, master_password):
         print("1. Add Wallet")
         print("2. View Wallet")
         print("3. List All Wallets")
-        print("4. Return to Main Menu")
+        print("4. Delete Wallet")
+        print("5. Return to Main Menu")
         choice = input("Enter your choice: ")
+
         if choice == '1':
             wallet_name = get_secure_input("Enter wallet name:")
             if wallet_name is None:
                 continue
-            print("If no username exists, enter '0'")
-            w_username = get_secure_input("Enter wallet username:")
+            w_username = get_secure_input("Enter wallet username (or '0'):")
             if w_username is None:
                 continue
-            print("If no password exists, enter '0'")
-            w_password = get_secure_input("Enter wallet password (or type 'gen' to auto-generate):", is_password=True)
+            w_password = get_secure_input("Enter wallet password (or 'gen'):", is_password=True)
             if w_password is None:
                 continue
-            print("If no recovery phrase exists, enter '0'")
-            recovery_phrase = get_secure_input("Enter recovery phrase:")
+            recovery_phrase = get_secure_input("Enter recovery phrase (or '0'):")
             if recovery_phrase is None:
                 continue
-            pin = get_secure_input("Enter PIN:", is_password=True)
+            pin = get_secure_input("Enter recovery PIN:", is_password=True)
             if pin is None:
                 continue
+
             payload = {
                 "username": username,
                 "master_password": master_password,
@@ -154,17 +169,22 @@ def wallet_menu(username, master_password):
                 "pin": pin
             }
             try:
-                response = requests.post(f"{API_URL}/add_wallet", json=payload)
-                print(response.json())
+                resp = requests.post(f"{API_URL}/add_wallet", json=payload)
+                resp.raise_for_status()
+                print(resp.json())
+            except HTTPError:
+                print("Error adding wallet: check your inputs.")
             except Exception as e:
                 print(f"Error adding wallet: {e}")
+
         elif choice == '2':
             wallet_name = get_secure_input("Enter wallet name:")
             if wallet_name is None:
                 continue
-            pin = get_secure_input("Enter PIN:", is_password=True)
+            pin = get_secure_input("Enter recovery PIN:", is_password=True)
             if pin is None:
                 continue
+
             payload = {
                 "username": username,
                 "master_password": master_password,
@@ -172,20 +192,41 @@ def wallet_menu(username, master_password):
                 "pin": pin
             }
             try:
-                response = requests.post(f"{API_URL}/get_wallet", json=payload)
-                print(response.json())
+                resp = requests.post(f"{API_URL}/get_wallet", json=payload)
+                resp.raise_for_status()
+                print(resp.json())
+            except HTTPError:
+                print("Error retrieving wallet: invalid credentials or PIN.")
             except Exception as e:
                 print(f"Error retrieving wallet: {e}")
+
         elif choice == '3':
-            params = {"username": username}
             try:
-                response = requests.get(f"{API_URL}/get_all_wallets", params=params)
+                resp = requests.post(f"{API_URL}/get_all_wallets", json={"username": username})
+                resp.raise_for_status()
                 print("Stored Wallets:")
-                for wallet in response.json().get("wallets", []):
-                    print(wallet)
+                for w in resp.json().get("wallets", []):
+                    print(" -", w)
+            except HTTPError:
+                print("Error listing wallets.")
             except Exception as e:
                 print(f"Error listing wallets: {e}")
+
         elif choice == '4':
+            wallet_name = get_secure_input("Enter wallet name to delete:")
+            if wallet_name is None:
+                continue
+            payload = {"username": username, "wallet_name": wallet_name}
+            try:
+                resp = requests.post(f"{API_URL}/delete_wallet", json=payload)
+                resp.raise_for_status()
+                print(resp.json())
+            except HTTPError:
+                print("Error deleting wallet.")
+            except Exception as e:
+                print(f"Error deleting wallet: {e}")
+
+        elif choice == '5':
             break
         else:
             print("Invalid choice. Try again.")
@@ -196,20 +237,21 @@ def credentials_menu(username, master_password):
         print("1. Add Credentials")
         print("2. View Credentials")
         print("3. List All Sites")
-        print("4. Return to Main Menu")
+        print("4. Delete Credentials")
+        print("5. Return to Main Menu")
         choice = input("Enter your choice: ")
+
         if choice == '1':
             site = get_secure_input("Enter site:")
             if site is None:
                 continue
-            print("If no username exists, enter '0'")
-            s_username = get_secure_input("Enter site username:")
+            s_username = get_secure_input("Enter site username (or '0'):")
             if s_username is None:
                 continue
-            print("If no password exists, enter '0'")
-            s_password = get_secure_input("Enter site password (or type 'gen' to auto-generate):", is_password=True)
+            s_password = get_secure_input("Enter site password (or 'gen'):", is_password=True)
             if s_password is None:
                 continue
+
             payload = {
                 "username": username,
                 "master_password": master_password,
@@ -218,34 +260,60 @@ def credentials_menu(username, master_password):
                 "s_password": s_password
             }
             try:
-                response = requests.post(f"{API_URL}/add_credentials", json=payload)
-                print(response.json())
+                resp = requests.post(f"{API_URL}/add_credentials", json=payload)
+                resp.raise_for_status()
+                print(resp.json())
+            except HTTPError:
+                print("Error adding credentials.")
             except Exception as e:
                 print(f"Error adding credentials: {e}")
+
         elif choice == '2':
             site = get_secure_input("Enter site:")
             if site is None:
                 continue
+
             payload = {
                 "username": username,
                 "master_password": master_password,
                 "site": site
             }
             try:
-                response = requests.post(f"{API_URL}/get_credentials", json=payload)
-                print(response.json())
+                resp = requests.post(f"{API_URL}/get_credentials", json=payload)
+                resp.raise_for_status()
+                print(resp.json())
+            except HTTPError:
+                print("Error retrieving credentials.")
             except Exception as e:
                 print(f"Error retrieving credentials: {e}")
+
         elif choice == '3':
-            params = {"username": username}
             try:
-                response = requests.get(f"{API_URL}/get_all_sites", params=params)
+                resp = requests.post(f"{API_URL}/get_all_sites", json={"username": username})
+                resp.raise_for_status()
                 print("Stored Sites:")
-                for site in response.json().get("sites", []):
-                    print(site)
+                for s in resp.json().get("sites", []):
+                    print(" -", s)
+            except HTTPError:
+                print("Error listing sites.")
             except Exception as e:
-                print(f"Error listing sites: {e}")
+                print(f"Error listing sites: {e}") 
+
         elif choice == '4':
+            site = get_secure_input("Enter site to delete:")
+            if site is None:
+                continue
+            payload = {"username": username, "site": site}
+            try:
+                resp = requests.post(f"{API_URL}/delete_credentials", json=payload)
+                resp.raise_for_status()
+                print(resp.json())
+            except HTTPError:
+                print("Error deleting credentials.")
+            except Exception as e:
+                print(f"Error deleting credentials: {e}")
+
+        elif choice == '5':
             break
         else:
             print("Invalid choice. Try again.")
@@ -260,6 +328,7 @@ def documents_menu(username, master_password):
         print("5. Delete Document")
         print("6. Return to Main Menu")
         choice = input("Enter your choice: ")
+
         if choice == '1':
             doc_name = get_secure_input("Enter document name:")
             if doc_name is None:
@@ -267,6 +336,7 @@ def documents_menu(username, master_password):
             doc_contents = get_secure_input("Enter document contents:")
             if doc_contents is None:
                 continue
+
             payload = {
                 "username": username,
                 "master_password": master_password,
@@ -274,33 +344,45 @@ def documents_menu(username, master_password):
                 "doc_contents": doc_contents
             }
             try:
-                response = requests.post(f"{API_URL}/add_secure_doc", json=payload)
-                print(response.json())
+                resp = requests.post(f"{API_URL}/add_secure_doc", json=payload)
+                resp.raise_for_status()
+                print(resp.json())
+            except HTTPError:
+                print("Error adding document.")
             except Exception as e:
                 print(f"Error adding document: {e}")
+
         elif choice == '2':
             doc_name = get_secure_input("Enter document name:")
             if doc_name is None:
                 continue
+
             payload = {
                 "username": username,
                 "master_password": master_password,
                 "doc_name": doc_name
             }
             try:
-                response = requests.post(f"{API_URL}/get_secure_doc", json=payload)
-                print(response.json())
+                resp = requests.post(f"{API_URL}/get_secure_doc", json=payload)
+                resp.raise_for_status()
+                print(resp.json())
+            except HTTPError:
+                print("Error viewing document.")
             except Exception as e:
                 print(f"Error viewing document: {e}")
+
         elif choice == '3':
-            params = {"username": username}
             try:
-                response = requests.get(f"{API_URL}/get_all_docs", params=params)
+                resp = requests.get(f"{API_URL}/get_all_docs", params={"username": username})
+                resp.raise_for_status()
                 print("Stored Documents:")
-                for doc in response.json().get("documents", []):
-                    print(doc)
+                for d in resp.json().get("documents", []):
+                    print(" -", d)
+            except HTTPError:
+                print("Error listing documents.")
             except Exception as e:
                 print(f"Error listing documents: {e}")
+
         elif choice == '4':
             doc_name = get_secure_input("Enter document name to update:")
             if doc_name is None:
@@ -308,6 +390,7 @@ def documents_menu(username, master_password):
             new_contents = get_secure_input("Enter new contents:")
             if new_contents is None:
                 continue
+
             payload = {
                 "username": username,
                 "master_password": master_password,
@@ -315,23 +398,29 @@ def documents_menu(username, master_password):
                 "new_contents": new_contents
             }
             try:
-                response = requests.post(f"{API_URL}/update_secure_doc", json=payload)
-                print(response.json())
+                resp = requests.post(f"{API_URL}/update_secure_doc", json=payload)
+                resp.raise_for_status()
+                print(resp.json())
+            except HTTPError:
+                print("Error updating document.")
             except Exception as e:
                 print(f"Error updating document: {e}")
+
         elif choice == '5':
             doc_name = get_secure_input("Enter document name to delete:")
             if doc_name is None:
                 continue
-            payload = {
-                "username": username,
-                "doc_name": doc_name
-            }
+
+            payload = {"username": username, "doc_name": doc_name}
             try:
-                response = requests.post(f"{API_URL}/delete_secure_doc", json=payload)
-                print(response.json())
+                resp = requests.post(f"{API_URL}/delete_secure_doc", json=payload)
+                resp.raise_for_status()
+                print(resp.json())
+            except HTTPError:
+                print("Error deleting document.")
             except Exception as e:
                 print(f"Error deleting document: {e}")
+
         elif choice == '6':
             break
         else:
@@ -345,23 +434,34 @@ def account_settings_menu(username, master_password):
         print("3. Delete All Data")
         print("4. Return to Main Menu")
         choice = input("Enter your choice: ")
+
         if choice == '1':
+            old_password = get_secure_input("Enter current master password:", is_password=True)
+            if old_password is None:
+                continue
             new_password = get_secure_input("Enter new master password:", is_password=True)
             if new_password is None:
                 continue
             confirm_password = get_secure_input("Confirm new master password:", is_password=True)
-            if confirm_password is None:
-                continue
-            if new_password != confirm_password:
+            if confirm_password is None or new_password != confirm_password:
                 print("Passwords don't match!")
                 continue
-            payload = {"username": username, "new_master_password": new_password}
+
+            payload = {
+                "username": username,
+                "old_master_password": old_password,
+                "new_master_password": new_password
+            }
             try:
-                response = requests.post(f"{API_URL}/reset_master_password", json=payload)
-                print(response.json())
+                resp = requests.post(f"{API_URL}/reset_master_password", json=payload)
+                resp.raise_for_status()
+                print(resp.json())
                 master_password = new_password
+            except HTTPError:
+                print("Error resetting password.")
             except Exception as e:
-                print(f"Error resetting password: {e}")
+                print(f"Error resetting password: {e}") 
+
         elif choice == '2':
             while True:
                 print("\n=== 2FA SETTINGS ===")
@@ -369,34 +469,54 @@ def account_settings_menu(username, master_password):
                 print("2. Disable 2FA")
                 print("3. Return to Account Settings")
                 sub_choice = input("Enter your choice: ")
+
                 if sub_choice == '1':
                     payload = {"username": username}
                     try:
-                        response = requests.post(f"{API_URL}/enable_2fa", json=payload)
-                        print(response.json())
+                        resp = requests.post(f"{API_URL}/enable_2fa", json=payload)
+                        resp.raise_for_status()
+                        data = resp.json()
+                        print("2FA enabled. Secret:", data.get("totp_secret"))
+                        print("Provisioning URI:", data.get("provisioning_uri"))
+                    except HTTPError:
+                        print("Error enabling 2FA.")
                     except Exception as e:
                         print(f"Error enabling 2FA: {e}")
+
                 elif sub_choice == '2':
-                    payload = {"username": username}
+                    pin = get_secure_input("Enter recovery PIN to disable 2FA:", is_password=True)
+                    if pin is None:
+                        continue
+                    payload = {
+                        "username": username,
+                        "pin": pin
+                    }
                     try:
-                        response = requests.post(f"{API_URL}/disable_2fa", json=payload)
-                        print(response.json())
+                        resp = requests.post(f"{API_URL}/disable_2fa", json=payload)
+                        resp.raise_for_status()
+                        print(resp.json())
+                    except HTTPError:
+                        print("Error disabling 2FA: invalid recovery PIN.")
                     except Exception as e:
                         print(f"Error disabling 2FA: {e}")
+                
                 elif sub_choice == '3':
                     break
-                else:
-                    print("Invalid choice. Try again.")
+
         elif choice == '3':
-            pin = get_secure_input("Enter PIN to confirm deletion:", is_password=True)
+            pin = get_secure_input("Enter recovery PIN:", is_password=True)
             if pin is None:
                 continue
             payload = {"username": username, "pin": pin}
             try:
-                response = requests.post(f"{API_URL}/delete_all_data", json=payload)
-                print(response.json())
+                resp = requests.post(f"{API_URL}/delete_all_data", json=payload)
+                resp.raise_for_status()
+                print(resp.json())
+            except HTTPError:
+                print("Error deleting all data.")
             except Exception as e:
                 print(f"Error deleting all data: {e}")
+
         elif choice == '4':
             break
         else:
@@ -433,6 +553,7 @@ def user_menu(username, master_password):
         print("4. Account Settings")
         print("5. Logout")
         choice = input("Enter your choice: ")
+
         if choice == '1':
             wallet_menu(username, master_password)
         elif choice == '2':
