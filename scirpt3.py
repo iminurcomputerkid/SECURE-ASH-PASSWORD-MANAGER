@@ -132,39 +132,6 @@ def login():
         print(f"Unexpected response {resp.status_code}: {resp.text}")
         return None, None
 
-def recover_account():
-    print("\n=== SECURE ASF PASSWORD MANAGER ===")
-    print("Recover Account")
-    username = get_secure_input("Enter username:")
-    if username is None:
-        return
-    recovery_pin = get_secure_input("Enter recovery PIN:", is_password=True)
-    if recovery_pin is None:
-        return
-
-    new_password = get_secure_input("Enter new master password:", is_password=True)
-    if new_password is None:
-        return
-    confirm_password = get_secure_input("Confirm new master password:", is_password=True)
-    if confirm_password is None:
-        return
-    if new_password != confirm_password:
-        print("Passwords don't match!")
-        return
-
-    payload = {
-        "username": username,
-        "recovery_pin": recovery_pin,
-        "new_master_password": new_password
-    }
-    try:
-        response = requests.post(f"{API_URL}/reset_master_password", json=payload)
-        response.raise_for_status()
-        print(response.json())
-    except HTTPError:
-        print("Account recovery failed: invalid PIN or server error.")
-    except Exception as e:
-        print(f"Account recovery error: {e}")
 
 def wallet_menu(username, master_password):
     while True:
@@ -561,8 +528,7 @@ def main_menu():
         print("\n=== SECURE ASF CLIENT ===")
         print("1. Login")
         print("2. Register")
-        print("3. Recover Account")
-        print("4. Exit")
+        print("3. Exit")
         choice = input("Enter your choice: ")
         if choice == '1':
             creds = login()
@@ -571,8 +537,6 @@ def main_menu():
         elif choice == '2':
             register_account()
         elif choice == '3':
-            recover_account()
-        elif choice == '4':
             print("Thank you for using SECURE ASF!")
             break
         else:
