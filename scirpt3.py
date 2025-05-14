@@ -65,6 +65,8 @@ def login():
     username = get_secure_input("Enter username:")
     if username is None:
         return None, None
+
+    # initial prompt
     master_password = get_secure_input("Enter master password:", is_password=True)
     if master_password is None:
         return None, None
@@ -72,45 +74,63 @@ def login():
     payload = {
         "username": username,
         "master_password": master_password
+        # totp_code and recovery_pin will be added if needed
     }
 
     while True:
         try:
             resp = requests.post(f"{API_URL}/login", json=payload)
-            # 1) Recovery PIN branch
-            if resp.status_code == 403:
-                detail = resp.json().get("detail", "")
-                if "Recovery PIN required" in detail:
-                    print("Recovery PIN required.")
-                    recovery_pin = get_secure_input("Enter recovery PIN:", is_password=True)
-                    if recovery_pin is None:
-                        return None, None
-                    payload["recovery_pin"] = recovery_pin
-                    continue
-                else:
-                    # 2) TOTP branch
-                    print("Two-factor authentication required.")
-                    totp_code = get_secure_input("Enter 2FA code:")
-                    if totp_code is None:
-                        return None, None
-                    payload["totp_code"] = totp_code
-                    continue
+        except Exception as e:
+            print(f"Login error: {e}")
+            return None, None
 
-            # 3) Success or bad credentials
-            resp.raise_for_status()
+        # 1) Wrong password → 401
+        if resp.status_code == 401:
+            print("Invalid username or password. Try again.")
+            master_password = get_secure_input("Enter master password:", is_password=True)
+            if master_password is None:
+                return None, None
+            payload["master_password"] = master_password
+            continue
+
+        # 2) Locked out / PIN / TOTP → 403
+        if resp.status_code == 403:
+            detail = resp.json().get("detail", "").lower()
+
+            if "invalid recovery pin" in detail or "recovery pin" in detail:
+                # 6th+ wrong → need PIN
+                recovery_pin = get_secure_input("Enter recovery PIN:", is_password=True)
+                if recovery_pin is None:
+                    return None, None
+                payload["recovery_pin"] = recovery_pin
+                continue
+
+            elif "invalid or missing totp" in detail or "2fa" in detail:
+                # 2FA required
+                print("Two-factor authentication required.")
+                totp_code = get_secure_input("Enter 2FA code:")
+                if totp_code is None:
+                    return None, None
+                payload["totp_code"] = totp_code
+                continue
+
+            else:
+                # e.g. “User locked out. Try again in XXX seconds.”
+                print(detail)
+                return None, None
+
+        # 3) Success!
+        if resp.ok:
             data = resp.json()
             if data.get("message", "").lower() == "login successful":
                 return username, master_password
             else:
-                print("Login failed: wrong username, password, or code.")
+                print("Login failed:", data.get("detail", data))
                 return None, None
 
-        except HTTPError:
-            print("Login failed: wrong username or password.")
-            return None, None
-        except Exception as e:
-            print(f"Login error: {e}")
-            return None, None
+        # any other status
+        print(f"Unexpected response {resp.status_code}: {resp.text}")
+        return None, None
 
 def recover_account():
     print("\n=== SECURE ASF PASSWORD MANAGER ===")
