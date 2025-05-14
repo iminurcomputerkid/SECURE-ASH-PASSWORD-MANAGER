@@ -60,7 +60,7 @@ def register_account():
         print(f"Registration error: {e}")
 
 def login():
-    print("\n=== SECURE ASF PASSWORD MANAGER ===")
+    print("\n=== SECURE ASF PASSW MANAGER ===")
     print("Login")
     username = get_secure_input("Enter username:")
     if username is None:
@@ -74,29 +74,43 @@ def login():
         "master_password": master_password
     }
 
-    # first attempt
-    try:
-        response = requests.post(f"{API_URL}/login", json=payload)
-        if response.status_code == 403:
-            print("Two-factor authentication required.")
-            totp_code = get_secure_input("Enter 2FA code:")
-            if totp_code is None:
+    while True:
+        try:
+            resp = requests.post(f"{API_URL}/login", json=payload)
+            # 1) Recovery PIN branch
+            if resp.status_code == 403:
+                detail = resp.json().get("detail", "")
+                if "Recovery PIN required" in detail:
+                    print("Recovery PIN required.")
+                    recovery_pin = get_secure_input("Enter recovery PIN:", is_password=True)
+                    if recovery_pin is None:
+                        return None, None
+                    payload["recovery_pin"] = recovery_pin
+                    continue
+                else:
+                    # 2) TOTP branch
+                    print("Two-factor authentication required.")
+                    totp_code = get_secure_input("Enter 2FA code:")
+                    if totp_code is None:
+                        return None, None
+                    payload["totp_code"] = totp_code
+                    continue
+
+            # 3) Success or bad credentials
+            resp.raise_for_status()
+            data = resp.json()
+            if data.get("message", "").lower() == "login successful":
+                return username, master_password
+            else:
+                print("Login failed: wrong username, password, or code.")
                 return None, None
-            payload["totp_code"] = totp_code
-            response = requests.post(f"{API_URL}/login", json=payload)
-        response.raise_for_status()
-        data = response.json()
-        if data.get("message", "").lower() == "login successful":
-            return username, master_password
-        else:
-            print("Login failed: wrong username, password, or 2FA code.")
+
+        except HTTPError:
+            print("Login failed: wrong username or password.")
             return None, None
-    except HTTPError:
-        print("Login failed: wrong username, password, or 2FA code.")
-        return None, None
-    except Exception as e:
-        print(f"Login error: {e}")
-        return None, None
+        except Exception as e:
+            print(f"Login error: {e}")
+            return None, None
 
 def recover_account():
     print("\n=== SECURE ASF PASSWORD MANAGER ===")
