@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox, simpledialog
 import threading
 import requests
 
@@ -10,7 +10,7 @@ class SecureASFApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Secure ASF Password Manager")
-        self.geometry("500x450")
+        self.geometry("500x400")
         self.resizable(False, False)
         self.username = None
         self.master_password = None
@@ -22,10 +22,9 @@ class SecureASFApp(tk.Tk):
 
         # Initialize frames
         self.frames = {}
-        frame_classes = [MainMenu, RegisterFrame, LoginFrame, RecoverFrame,
-                         UserMenuFrame, WalletFrame, CredentialsFrame,
-                         DocumentsFrame, AccountSettingsFrame]
-        for F in frame_classes:
+        for F in (MainMenu, RegisterFrame, LoginFrame, RecoverFrame,
+                  UserMenuFrame, WalletFrame, CredentialsFrame,
+                  DocumentsFrame, AccountSettingsFrame):
             frame = F(parent=container, controller=self)
             self.frames[F] = frame
             frame.grid(row=0, column=0, sticky='nsew')
@@ -39,338 +38,428 @@ class SecureASFApp(tk.Tk):
 class MainMenu(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
+        self.controller = controller
         ttk.Label(self, text="Secure ASF Client", font=('Helvetica', 18)).pack(pady=30)
         ttk.Button(self, text="Login", command=lambda: controller.show_frame(LoginFrame))\
-.pack(fill='x', padx=100, pady=5)
+            .pack(fill='x', padx=100, pady=5)
         ttk.Button(self, text="Register", command=lambda: controller.show_frame(RegisterFrame))\
-.pack(fill='x', padx=100, pady=5)
+            .pack(fill='x', padx=100, pady=5)
         ttk.Button(self, text="Recover Account", command=lambda: controller.show_frame(RecoverFrame))\
-.pack(fill='x', padx=100, pady=5)
+            .pack(fill='x', padx=100, pady=5)
         ttk.Button(self, text="Exit", command=controller.destroy)\
-.pack(fill='x', padx=100, pady=20)
+            .pack(fill='x', padx=100, pady=20)
 
 class RegisterFrame(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
         ttk.Label(self, text="Register New Account", font=('Helvetica', 16)).pack(pady=10)
-        self.vars = {name: tk.StringVar() for name in [
-            'username', 'pw', 'pw_conf', 'pin', 'pin_conf'
-        ]}
-        labels = [
-            ('Username:', 'username', False),
-            ('Master Password:', 'pw', True),
-            ('Confirm Password:', 'pw_conf', True),
-            ('Recovery PIN (6 digits):', 'pin', True),
-            ('Confirm PIN:', 'pin_conf', True)
-        ]
-        for text, key, is_pwd in labels:
-            ttk.Label(self, text=text).pack(anchor='w', padx=50)
-            ttk.Entry(self, textvariable=self.vars[key], show='*' if is_pwd else None)\
-.pack(pady=2, padx=50, fill='x')
-        btn = ttk.Button(self, text="Submit", command=self.register)
-        btn.pack(pady=10)
+
+        self.username_var = tk.StringVar()
+        self.pw_var = tk.StringVar()
+        self.pw_confirm_var = tk.StringVar()
+        self.pin_var = tk.StringVar()
+        self.pin_confirm_var = tk.StringVar()
+
+        ttk.Label(self, text="Username:").pack(anchor='w', padx=50)
+        ttk.Entry(self, textvariable=self.username_var).pack(pady=2, padx=50, fill='x')
+        ttk.Label(self, text="Master Password:").pack(anchor='w', padx=50)
+        ttk.Entry(self, textvariable=self.pw_var, show='*').pack(pady=2, padx=50, fill='x')
+        ttk.Label(self, text="Confirm Password:").pack(anchor='w', padx=50)
+        ttk.Entry(self, textvariable=self.pw_confirm_var, show='*').pack(pady=2, padx=50, fill='x')
+        ttk.Label(self, text="Recovery PIN (6 digits):").pack(anchor='w', padx=50)
+        ttk.Entry(self, textvariable=self.pin_var, show='*').pack(pady=2, padx=50, fill='x')
+        ttk.Label(self, text="Confirm PIN:").pack(anchor='w', padx=50)
+        ttk.Entry(self, textvariable=self.pin_confirm_var, show='*').pack(pady=2, padx=50, fill='x')
+
+        self.submit_btn = ttk.Button(self, text="Submit", command=self.register)
+        self.submit_btn.pack(pady=10)
         ttk.Button(self, text="Back", command=lambda: controller.show_frame(MainMenu)).pack()
 
     def register(self):
-        user = self.vars['username'].get().strip()
-        pw = self.vars['pw'].get()
-        pw_conf = self.vars['pw_conf'].get()
-        pin = self.vars['pin'].get()
-        pin_conf = self.vars['pin_conf'].get()
-        if not all([user, pw, pw_conf, pin, pin_conf]):
-            self.show_status("All fields are required.")
-            return
-        if pw != pw_conf:
-            self.show_status("Passwords do not match.")
-            return
-        if pin != pin_conf or not pin.isdigit() or len(pin) != 6:
-            self.show_status("PINs must match and be 6 digits.")
-            return
-        payload = {
-            "username": user,
-            "master_password": pw,
-            "confirm_master_password": pw_conf,
-            "recovery_pin": pin,
-            "confirm_recovery_pin": pin_conf
-        }
-        self.api_post('/register', payload, next_frame=MainMenu)
-
-    def api_post(self, path, payload, next_frame=None):
+        self.submit_btn.config(text="Registering... please wait", state='disabled')
         def task():
-            try:
-                resp = requests.post(API_URL+path, json=payload)
-                resp.raise_for_status()
-                msg = resp.json().get('message','Success')
-                self.show_status(msg)
-                if next_frame:
-                    self.controller.show_frame(next_frame)
-            except Exception as e:
-                self.show_status(str(e))
+            user = self.username_var.get().strip()
+            pw = self.pw_var.get()
+            pw_conf = self.pw_confirm_var.get()
+            pin = self.pin_var.get()
+            pin_conf = self.pin_confirm_var.get()
+            if not (user and pw and pw_conf and pin and pin_conf):
+                messagebox.showerror("Error", "All fields are required.")
+            elif pw != pw_conf:
+                messagebox.showerror("Error", "Passwords do not match.")
+            elif pin != pin_conf or not pin.isdigit() or len(pin) != 6:
+                messagebox.showerror("Error", "PINs must match and be 6 digits.")
+            else:
+                payload = {
+                    "username": user,
+                    "master_password": pw,
+                    "confirm_master_password": pw_conf,
+                    "recovery_pin": pin,
+                    "confirm_recovery_pin": pin_conf
+                }
+                try:
+                    resp = requests.post(f"{API_URL}/register", json=payload)
+                    resp.raise_for_status()
+                    messagebox.showinfo("Success", resp.json().get('message', 'Registered successfully.'))
+                    self.controller.show_frame(MainMenu)
+                except Exception as e:
+                    messagebox.showerror("Registration Failed", str(e))
+            self.submit_btn.config(text="Submit", state='normal')
         threading.Thread(target=task).start()
 
-    def show_status(self, msg):
-        if hasattr(self, '_status_label'): self._status_label.destroy()
-        self._status_label = ttk.Label(self, text=msg)
-        self._status_label.pack()
-
-class LoginFrame(RegisterFrame):
+class LoginFrame(ttk.Frame):
     def __init__(self, parent, controller):
-        super().__init__(parent, controller)
+        super().__init__(parent)
+        self.controller = controller
         ttk.Label(self, text="Login", font=('Helvetica', 16)).pack(pady=10)
-        # reuse vars but rename keys
-        self.vars = {'username': tk.StringVar(), 'pw': tk.StringVar()}
-        labels = [('Username:', 'username', False), ('Master Password:', 'pw', True)]
-        for text, key, is_pwd in labels:
-            ttk.Label(self, text=text).pack(anchor='w', padx=50)
-            ttk.Entry(self, textvariable=self.vars[key], show='*' if is_pwd else None)\
-.pack(pady=2, padx=50, fill='x')
-        btn = ttk.Button(self, text="Login", command=self.login)
-        btn.pack(pady=10)
+
+        self.user_var = tk.StringVar()
+        self.pw_var = tk.StringVar()
+
+        ttk.Label(self, text="Username:").pack(anchor='w', padx=50)
+        ttk.Entry(self, textvariable=self.user_var).pack(pady=2, padx=50, fill='x')
+        ttk.Label(self, text="Master Password:").pack(anchor='w', padx=50)
+        ttk.Entry(self, textvariable=self.pw_var, show='*').pack(pady=2, padx=50, fill='x')
+
+        self.login_btn = ttk.Button(self, text="Login", command=self.login)
+        self.login_btn.pack(pady=10)
         ttk.Button(self, text="Back", command=lambda: controller.show_frame(MainMenu)).pack()
 
     def login(self):
-        user = self.vars['username'].get().strip()
-        pw = self.vars['pw'].get()
-        if not all([user, pw]):
-            self.show_status("Username and password are required.")
-            return
-        payload = {"username": user, "master_password": pw}
-        self.api_post('/login', payload, next_frame=UserMenuFrame)
+        self.login_btn.config(text="Logging in... please wait", state='disabled')
+        def task():
+            user = self.user_var.get().strip()
+            pw = self.pw_var.get()
+            if not (user and pw):
+                messagebox.showerror("Error", "Username and password are required.")
+            else:
+                payload = {"username": user, "master_password": pw}
+                try:
+                    resp = requests.post(f"{API_URL}/login", json=payload)
+                    if resp.status_code == 200 and resp.json().get('message','').lower().startswith('login successful'):
+                        self.controller.username = user
+                        self.controller.master_password = pw
+                        messagebox.showinfo("Success", "Login successful.")
+                        self.controller.show_frame(UserMenuFrame)
+                    else:
+                        detail = resp.json().get('detail', resp.text)
+                        messagebox.showerror("Login Failed", detail)
+                except Exception as e:
+                    messagebox.showerror("Error", str(e))
+            self.login_btn.config(text="Login", state='normal')
+        threading.Thread(target=task).start()
 
-class RecoverFrame(LoginFrame):
+class RecoverFrame(ttk.Frame):
     def __init__(self, parent, controller):
-        super().__init__(parent, controller)
+        super().__init__(parent)
+        self.controller = controller
         ttk.Label(self, text="Recover Account", font=('Helvetica', 16)).pack(pady=10)
-        self.vars = {'username': tk.StringVar(), 'pin': tk.StringVar(),
-                     'pw': tk.StringVar(), 'pw_conf': tk.StringVar()}
-        labels = [
-            ('Username:', 'username', False),
-            ('Recovery PIN:', 'pin', True),
-            ('New Password:', 'pw', True),
-            ('Confirm Password:', 'pw_conf', True)
-        ]
-        for text, key, is_pwd in labels:
-            ttk.Label(self, text=text).pack(anchor='w', padx=50)
-            ttk.Entry(self, textvariable=self.vars[key], show='*' if is_pwd else None)\
-.pack(pady=2, padx=50, fill='x')
-        btn = ttk.Button(self, text="Recover", command=self.recover)
-        btn.pack(pady=10)
+
+        self.user_var = tk.StringVar()
+        self.pin_var = tk.StringVar()
+        self.new_pw_var = tk.StringVar()
+        self.new_pw_conf_var = tk.StringVar()
+
+        ttk.Label(self, text="Username:").pack(anchor='w', padx=50)
+        ttk.Entry(self, textvariable=self.user_var).pack(pady=2, padx=50, fill='x')
+        ttk.Label(self, text="Recovery PIN:").pack(anchor='w', padx=50)
+        ttk.Entry(self, textvariable=self.pin_var, show='*').pack(pady=2, padx=50, fill='x')
+        ttk.Label(self, text="New Password:").pack(anchor='w', padx=50)
+        ttk.Entry(self, textvariable=self.new_pw_var, show='*').pack(pady=2, padx=50, fill='x')
+        ttk.Label(self, text="Confirm Password:").pack(anchor='w', padx=50)
+        ttk.Entry(self, textvariable=self.new_pw_conf_var, show='*').pack(pady=2, padx=50, fill='x')
+
+        self.recover_btn = ttk.Button(self, text="Recover", command=self.recover)
+        self.recover_btn.pack(pady=10)
         ttk.Button(self, text="Back", command=lambda: controller.show_frame(MainMenu)).pack()
 
     def recover(self):
-        user = self.vars['username'].get().strip()
-        pin = self.vars['pin'].get()
-        pw = self.vars['pw'].get()
-        pw_conf = self.vars['pw_conf'].get()
-        if not all([user, pin, pw, pw_conf]):
-            self.show_status("All fields are required.")
-            return
-        if pw != pw_conf:
-            self.show_status("Passwords do not match.")
-            return
-        payload = {"username": user, "recovery_pin": pin, "new_master_password": pw}
-        self.api_post('/reset_master_password', payload, next_frame=MainMenu)
+        self.recover_btn.config(text="Recovering... please wait", state='disabled')
+        def task():
+            user = self.user_var.get().strip()
+            pin = self.pin_var.get()
+            new_pw = self.new_pw_var.get()
+            new_conf = self.new_pw_conf_var.get()
+            if not (user and pin and new_pw and new_conf):
+                messagebox.showerror("Error", "All fields are required.")
+            elif new_pw != new_conf:
+                messagebox.showerror("Error", "Passwords do not match.")
+            else:
+                payload = {"username": user, "recovery_pin": pin, "new_master_password": new_pw}
+                try:
+                    resp = requests.post(f"{API_URL}/reset_master_password", json=payload)
+                    resp.raise_for_status()
+                    messagebox.showinfo("Success", resp.json().get('message', 'Password reset successful.'))
+                    self.controller.show_frame(MainMenu)
+                except Exception as e:
+                    messagebox.showerror("Recovery Failed", str(e))
+            self.recover_btn.config(text="Recover", state='normal')
+        threading.Thread(target=task).start()
 
 class UserMenuFrame(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
+        self.controller = controller
         ttk.Label(self, text=lambda: f"Logged in as {controller.username}", font=('Helvetica', 14))\
-.pack(pady=10)
-        items = [
-            ("Wallet Vault", WalletFrame),
-            ("Site Credentials Vault", CredentialsFrame),
-            ("Secure Documents Vault", DocumentsFrame),
-            ("Account Settings", AccountSettingsFrame)
-        ]
-        for text, frame in items:
-            ttk.Button(self, text=text, command=lambda f=frame: controller.show_frame(f))\
-.pack(fill='x', padx=100, pady=5)
-        ttk.Button(self, text="Logout", command=lambda: controller.show_frame(MainMenu))\
-.pack(pady=20)
+            .pack(pady=10)
+        ttk.Button(self, text="Wallet Vault", command=lambda: controller.show_frame(WalletFrame))\
+            .pack(fill='x', padx=100, pady=5)
+        ttk.Button(self, text="Site Credentials Vault", command=lambda: controller.show_frame(CredentialsFrame))\
+            .pack(fill='x', padx=100, pady=5)
+        ttk.Button(self, text="Secure Documents Vault", command=lambda: controller.show_frame(DocumentsFrame))\
+            .pack(fill='x', padx=100, pady=5)
+        ttk.Button(self, text="Account Settings", command=lambda: controller.show_frame(AccountSettingsFrame))\
+            .pack(fill='x', padx=100, pady=5)
+        self.logout_btn = ttk.Button(self, text="Logout", command=self.logout)
+        self.logout_btn.pack(pady=20)
 
-class CategoryFrame(ttk.Frame):
-    def __init__(self, parent, controller, title, actions):
+    def logout(self):
+        self.logout_btn.config(text="Logging out... please wait", state='disabled')
+        self.controller.username = None
+        self.controller.master_password = None
+        self.controller.show_frame(MainMenu)
+        self.logout_btn.config(text="Logout", state='normal')
+
+class WalletFrame(ttk.Frame):
+    def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
-        self.title = title
-        ttk.Label(self, text=title, font=('Helvetica', 16)).pack(pady=10)
-        self.actions = actions  # dict of button_text: method
-        for text, method in actions.items():
-            ttk.Button(self, text=text, command=getattr(self, method))\
-.pack(fill='x', padx=100, pady=2)
+        ttk.Label(self, text="Wallet Vault", font=('Helvetica', 16)).pack(pady=10)
+        ttk.Button(self, text="Add Wallet", command=self.add_wallet)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="View Wallet", command=self.view_wallet)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="List All Wallets", command=self.list_wallets)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="Delete Wallet", command=self.delete_wallet)\
+            .pack(fill='x', padx=100, pady=2)
         ttk.Button(self, text="Back", command=lambda: controller.show_frame(UserMenuFrame))\
-.pack(pady=10)
-        self.form_frame = ttk.Frame(self)
-
-    def clear_form(self):
-        for widget in self.form_frame.winfo_children(): widget.destroy()
-        self.form_frame.pack_forget()
-
-    def show_menu(self):
-        self.clear_form()
-
-    def build_form(self, title, fields, api_path, include_master=True):
-        self.clear_form()
-        ttk.Label(self.form_frame, text=title, font=('Helvetica', 16)).pack(pady=10)
-        self.vars = {}
-        for label_text, key, is_pwd in fields:
-            ttk.Label(self.form_frame, text=label_text).pack(anchor='w', padx=50)
-            var = tk.StringVar()
-            entry = ttk.Entry(self.form_frame, textvariable=var, show='*' if is_pwd else None)
-            entry.pack(pady=2, padx=50, fill='x')
-            self.vars[key] = var
-        submit_btn = ttk.Button(self.form_frame, text="Submit", command=lambda: self.submit(api_path, include_master))
-        submit_btn.pack(pady=10)
-        self.status_label = ttk.Label(self.form_frame, text="")
-        self.status_label.pack()
-        ttk.Button(self.form_frame, text="Back", command=self.show_menu).pack(pady=5)
-        self.form_frame.pack()
-
-    def submit(self, api_path, include_master):
-        payload = {k: v.get() for k, v in self.vars.items()}
-        payload['username'] = self.controller.username
-        if include_master:
-            payload['master_password'] = self.controller.master_password
-        def task():
-            try:
-                resp = requests.post(API_URL+api_path, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-                self.status_label.config(text=str(data))
-            except Exception as e:
-                self.status_label.config(text=str(e))
-        threading.Thread(target=task).start()
-
-    def list_items(self, api_path, include_master=False):
-        self.clear_form()
-        text = tk.Text(self.form_frame, height=10)
-        text.pack(pady=10)
-        def task():
-            try:
-                payload = {'username': self.controller.username}
-                if include_master:
-                    payload['master_password'] = self.controller.master_password
-                resp = requests.post(API_URL+api_path, json=payload)
-                resp.raise_for_status()
-                data = resp.json()
-                text.insert('1.0', '\n'.join(map(str, data)))
-            except Exception as e:
-                text.insert('1.0', str(e))
-        threading.Thread(target=task).start()
-        ttk.Button(self.form_frame, text="Back", command=self.show_menu).pack(pady=5)
-        self.form_frame.pack()
-
-class WalletFrame(CategoryFrame):
-    def __init__(self, parent, controller):
-        actions = {
-            "Add Wallet": "add_wallet",
-            "View Wallet": "view_wallet",
-            "List All Wallets": "list_wallets",
-            "Delete Wallet": "delete_wallet"
-        }
-        super().__init__(parent, controller, "Wallet Vault", actions)
+            .pack(pady=10)
 
     def add_wallet(self):
-        fields = [
-            ('Wallet Name:', 'wallet_name', False),
-            ('Wallet Username:', 'w_username', False),
-            ('Wallet Password:', 'w_password', True),
-            ('Recovery Phrase:', 'recovery_phrase', False),
-            ('Recovery PIN:', 'pin', True)
-        ]
-        self.build_form("Add Wallet", fields, '/add_wallet')
+        name = simpledialog.askstring("Wallet Name", "Enter wallet name:")
+        if not name: return
+        wuser = simpledialog.askstring("Username", "Enter wallet username (or '0'):")
+        if wuser is None: return
+        wpw = simpledialog.askstring("Password", "Enter wallet password (or 'gen'):", show='*')
+        if wpw is None: return
+        phrase = simpledialog.askstring("Recovery Phrase", "Enter recovery phrase (or '0'):")
+        if phrase is None: return
+        pin = simpledialog.askstring("PIN", "Enter recovery PIN:", show='*')
+        if pin is None: return
+        self._api_call('/add_wallet', {
+            'username': self.controller.username,
+            'master_password': self.controller.master_password,
+            'wallet_name': name,
+            'w_username': wuser,
+            'w_password': wpw,
+            'recovery_phrase': phrase,
+            'pin': pin
+        })
 
     def view_wallet(self):
-        fields = [('Wallet Name:', 'wallet_name', False), ('Recovery PIN:', 'pin', True)]
-        self.build_form("View Wallet", fields, '/get_wallet')
+        name = simpledialog.askstring("Wallet Name", "Enter wallet name:")
+        if not name: return
+        pin = simpledialog.askstring("PIN", "Enter recovery PIN:", show='*')
+        if pin is None: return
+        self._api_call('/get_wallet', {
+            'username': self.controller.username,
+            'master_password': self.controller.master_password,
+            'wallet_name': name,
+            'pin': pin
+        })
 
     def list_wallets(self):
-        self.list_items('/get_all_wallets')
+        self._api_call('/get_all_wallets', {'username': self.controller.username})
 
     def delete_wallet(self):
-        fields = [('Wallet Name:', 'wallet_name', False)]
-        self.build_form("Delete Wallet", fields, '/delete_wallet', include_master=False)
+        name = simpledialog.askstring("Wallet Name", "Enter wallet name to delete:")
+        if not name: return
+        self._api_call('/delete_wallet', {
+            'username': self.controller.username,
+            'wallet_name': name
+        })
+
+    def _api_call(self, path, payload):
+        def task():
+            try:
+                resp = requests.post(f"{API_URL}{path}", json=payload)
+                resp.raise_for_status()
+                messagebox.showinfo("Success", resp.json())
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+        threading.Thread(target=task).start()
 
 class CredentialsFrame(WalletFrame):
     def __init__(self, parent, controller):
         super().__init__(parent, controller)
-        self.title = "Site Credentials Vault"
+        for widget in self.winfo_children():
+            widget.destroy()
+        ttk.Label(self, text="Site Credentials Vault", font=('Helvetica', 16)).pack(pady=10)
+        ttk.Button(self, text="Add Credentials", command=self.add_cred)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="View Credentials", command=self.view_cred)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="List All Sites", command=self.list_cred)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="Delete Credentials", command=self.delete_cred)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="Back", command=lambda: controller.show_frame(UserMenuFrame))\
+            .pack(pady=10)
 
-    def add_wallet(self): self.build_form = self.add_cred  # not used
-    def add_cred(self): pass  # overridden
+    def add_cred(self):
+        site = simpledialog.askstring("Site", "Enter site name:")
+        if not site: return
+        user = simpledialog.askstring("Username", "Enter site username (or '0'):")
+        if user is None: return
+        pwd = simpledialog.askstring("Password", "Enter site password (or 'gen'):", show='*')
+        if pwd is None: return
+        self._api_call('/add_credentials', {
+            'username': self.controller.username,
+            'master_password': self.controller.master_password,
+            'site': site,
+            's_username': user,
+            's_password': pwd
+        })
 
-    def add_wallet(self):
-        fields = [('Site Name:', 'site', False), ('Username:', 's_username', False), ('Password:', 's_password', True)]
-        self.build_form("Add Credentials", fields, '/add_credentials')
+    def view_cred(self):
+        site = simpledialog.askstring("Site", "Enter site name:")
+        if not site: return
+        self._api_call('/get_credentials', {
+            'username': self.controller.username,
+            'master_password': self.controller.master_password,
+            'site': site
+        })
 
-    def view_wallet(self):
-        fields = [('Site Name:', 'site', False)]
-        self.build_form("View Credentials", fields, '/get_credentials')
+    def list_cred(self):
+        self._api_call('/get_all_sites', {'username': self.controller.username})
 
-    def list_wallets(self):
-        self.list_items('/get_all_sites')
+    def delete_cred(self):
+        site = simpledialog.askstring("Site", "Enter site name to delete:")
+        if not site: return
+        self._api_call('/delete_credentials', {
+            'username': self.controller.username,
+            'site': site
+        })
 
-    def delete_wallet(self):
-        fields = [('Site Name:', 'site', False)]
-        self.build_form("Delete Credentials", fields, '/delete_credentials', include_master=False)
-
-class DocumentsFrame(CategoryFrame):
+class DocumentsFrame(WalletFrame):
     def __init__(self, parent, controller):
-        actions = {
-            "Add Document": "add_doc",
-            "View Document": "view_doc",
-            "List All Documents": "list_docs",
-            "Update Document": "update_doc",
-            "Delete Document": "delete_doc"
-        }
-        super().__init__(parent, controller, "Secure Documents Vault", actions)
+        super().__init__(parent, controller)
+        for widget in self.winfo_children():
+            widget.destroy()
+        ttk.Label(self, text="Secure Documents Vault", font=('Helvetica', 16)).pack(pady=10)
+        ttk.Button(self, text="Add Document", command=self.add_doc)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="View Document", command=self.view_doc)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="List All Documents", command=self.list_docs)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="Update Document", command=self.update_doc)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="Delete Document", command=self.delete_doc)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="Back", command=lambda: controller.show_frame(UserMenuFrame))\
+            .pack(pady=10)
 
     def add_doc(self):
-        fields = [('Document Name:', 'doc_name', False), ('Contents:', 'doc_contents', False)]
-        self.build_form("Add Document", fields, '/add_secure_doc')
+        name = simpledialog.askstring("Document Name", "Enter document name:")
+        if not name: return
+        contents = simpledialog.askstring("Contents", "Enter document contents:")
+        if contents is None: return
+        self._api_call('/add_secure_doc', {
+            'username': self.controller.username,
+            'master_password': self.controller.master_password,
+            'doc_name': name,
+            'doc_contents': contents
+        })
 
     def view_doc(self):
-        fields = [('Document Name:', 'doc_name', False)]
-        self.build_form("View Document", fields, '/get_secure_doc')
+        name = simpledialog.askstring("Document Name", "Enter document name:")
+        if not name: return
+        self._api_call('/get_secure_doc', {
+            'username': self.controller.username,
+            'master_password': self.controller.master_password,
+            'doc_name': name
+        })
 
     def list_docs(self):
-        self.list_items('/get_all_docs')
+        self._api_call('/get_all_docs', {'username': self.controller.username})
 
     def update_doc(self):
-        fields = [('Document Name:', 'doc_name', False), ('New Contents:', 'new_contents', False)]
-        self.build_form("Update Document", fields, '/update_secure_doc')
+        name = simpledialog.askstring("Document Name", "Enter document name to update:")
+        if not name: return
+        new = simpledialog.askstring("New Contents", "Enter new contents:")
+        if new is None: return
+        self._api_call('/update_secure_doc', {
+            'username': self.controller.username,
+            'master_password': self.controller.master_password,
+            'doc_name': name,
+            'new_contents': new
+        })
 
     def delete_doc(self):
-        fields = [('Document Name:', 'doc_name', False)]
-        self.build_form("Delete Document", fields, '/delete_secure_doc', include_master=False)
+        name = simpledialog.askstring("Document Name", "Enter document name to delete:")
+        if not name: return
+        self._api_call('/delete_secure_doc', {
+            'username': self.controller.username,
+            'doc_name': name
+        })
 
-class AccountSettingsFrame(CategoryFrame):
+class AccountSettingsFrame(ttk.Frame):
     def __init__(self, parent, controller):
-        actions = {
-            "Change Master Password": "change_password",
-            "Enable 2FA": "enable_2fa",
-            "Disable 2FA": "disable_2fa",
-            "Delete All Data": "delete_all_data"
-        }
-        super().__init__(parent, controller, "Account Settings", actions)
+        super().__init__(parent)
+        self.controller = controller
+        ttk.Label(self, text="Account Settings", font=('Helvetica', 16)).pack(pady=10)
+        ttk.Button(self, text="Change Master Password", command=self.change_password)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="Enable 2FA", command=self.enable_2fa)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="Disable 2FA", command=self.disable_2fa)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="Delete All Data", command=self.delete_all)\
+            .pack(fill='x', padx=100, pady=2)
+        ttk.Button(self, text="Back", command=lambda: controller.show_frame(UserMenuFrame))\
+            .pack(pady=10)
 
     def change_password(self):
-        fields = [('Current Password:', 'old_master_password', True),
-                  ('New Password:', 'new_master_password', True),
-                  ('Confirm Password:', 'confirm_new_password', True)]
-        self.build_form("Change Master Password", fields, '/reset_master_password')
+        old = simpledialog.askstring("Current Password", "Enter current master password:", show='*')
+        if old is None: return
+        new = simpledialog.askstring("New Password", "Enter new master password:", show='*')
+        if new is None: return
+        conf = simpledialog.askstring("Confirm Password", "Confirm new master password:", show='*')
+        if conf != new:
+            messagebox.showerror("Error", "Passwords don't match!")
+            return
+        self._api_call('/reset_master_password', {
+            'username': self.controller.username,
+            'old_master_password': old,
+            'new_master_password': new
+        })
 
     def enable_2fa(self):
-        self.list_items('/enable_2fa')
+        self._api_call('/enable_2fa', {'username': self.controller.username})
 
     def disable_2fa(self):
-        fields = [('Recovery PIN:', 'pin', True)]
-        self.build_form("Disable 2FA", fields, '/disable_2fa', include_master=False)
+        pin = simpledialog.askstring("Recovery PIN", "Enter recovery PIN to disable 2FA:", show='*')
+        if pin is None: return
+        self._api_call('/disable_2fa', {'username': self.controller.username, 'pin': pin})
 
-    def delete_all_data(self):
-        fields = [('Recovery PIN:', 'pin', True)]
-        self.build_form("Delete All Data", fields, '/delete_all_data', include_master=False)
+    def delete_all(self):
+        pin = simpledialog.askstring("Recovery PIN", "Enter recovery PIN:", show='*')
+        if pin is None: return
+        if messagebox.askyesno("Confirm", "Are you sure? This will delete ALL your data."):
+            self._api_call('/delete_all_data', {'username': self.controller.username, 'pin': pin})
+
+    def _api_call(self, path, payload):
+        def task():
+            try:
+                resp = requests.post(f"{API_URL}{path}", json=payload)
+                resp.raise_for_status()
+                messagebox.showinfo("Success", resp.json())
+            except Exception as e:
+                messagebox.showerror("Error", str(e))
+        threading.Thread(target=task).start()
 
 if __name__ == '__main__':
     app = SecureASFApp()
