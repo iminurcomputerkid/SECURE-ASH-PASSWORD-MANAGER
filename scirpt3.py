@@ -213,17 +213,24 @@ def wallet_menu(username, master_password):
             except Exception as e:
                 print(f"Error listing wallets: {e}")
 
-        elif choice == '4':
+        elif choice == '4':            
             wallet_name = get_secure_input("Enter wallet name to delete:")
             if wallet_name is None:
                 continue
-            payload = {"username": username, "wallet_name": wallet_name}
+            pin = get_secure_input("Enter recovery PIN:", is_password=True)
+            if pin is None:
+                continue
+            payload = {
+                "username": username,
+                "wallet_name": wallet_name,
+                "pin": pin
+            }
             try:
                 resp = requests.post(f"{API_URL}/delete_wallet", json=payload)
                 resp.raise_for_status()
                 print(resp.json())
             except HTTPError:
-                print("Error deleting wallet.")
+                print("Error deleting wallet: invalid PIN.")
             except Exception as e:
                 print(f"Error deleting wallet: {e}")
 
@@ -300,17 +307,24 @@ def credentials_menu(username, master_password):
             except Exception as e:
                 print(f"Error listing sites: {e}") 
 
-        elif choice == '4':
+        elif choice == '4':          
             site = get_secure_input("Enter site to delete:")
             if site is None:
                 continue
-            payload = {"username": username, "site": site}
+            pin = get_secure_input("Enter recovery PIN:", is_password=True)
+            if pin is None:
+                continue
+            payload = {
+                "username": username,
+                "site": site,
+                "pin": pin
+            }
             try:
                 resp = requests.post(f"{API_URL}/delete_credentials", json=payload)
                 resp.raise_for_status()
                 print(resp.json())
             except HTTPError:
-                print("Error deleting credentials.")
+                print("Error deleting credentials: invalid PIN.")
             except Exception as e:
                 print(f"Error deleting credentials: {e}")
 
@@ -407,18 +421,24 @@ def documents_menu(username, master_password):
             except Exception as e:
                 print(f"Error updating document: {e}")
 
-        elif choice == '5':
+        elif choice == '5':          
             doc_name = get_secure_input("Enter document name to delete:")
             if doc_name is None:
                 continue
-
-            payload = {"username": username, "doc_name": doc_name}
+            pin = get_secure_input("Enter recovery PIN:", is_password=True)
+            if pin is None:
+                continue
+            payload = {
+                "username": username,
+                "doc_name": doc_name,
+                "pin": pin
+            }
             try:
                 resp = requests.post(f"{API_URL}/delete_secure_doc", json=payload)
                 resp.raise_for_status()
                 print(resp.json())
             except HTTPError:
-                print("Error deleting document.")
+                print("Error deleting document: invalid PIN.")
             except Exception as e:
                 print(f"Error deleting document: {e}")
 
