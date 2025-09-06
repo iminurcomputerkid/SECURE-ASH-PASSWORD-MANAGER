@@ -26,6 +26,7 @@ python3 main.py
 
 If IDE:
 Make new virtual environment and install the dependencies in requirements.yml 
+then run as normal
 
 For VsCode: 
 (Ctrl+Shift+P)
