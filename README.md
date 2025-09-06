@@ -12,16 +12,25 @@ Easy Installation: Install dependencies with simple commands.
 
 Flexible Execution: Run via VSCode, terminal batch execution, or other IDEs.
 
-__________________Installation__________________(INSTRUCTIONS NEED REVISION)
+__________________Installation and Run Instructions__________________
 
-Clone the repository:
+Clone the repository using gitbash:
 
 git clone https://github.com/iminurcomputerkid/SECURE-ASF-PASSW-MAN.git
-cd SECURE-ASF-PASSW-MAN
 
-Install Dependencies:
+Open in IDE of choice (or nano if you're sligtly insane)
 
+If nano or vim:
 pip install -r requirements.yml
+python3 main.py
+
+If IDE:
+Make new virtual environment and install the dependencies in requirements.yml 
+
+For VsCode: (Ctrl+Shift+P), scroll down until you see select python interpreter, Create Environment, Use whatever python installation you want, click requirements when it asks if you'd like to add any dependencies and create it, wait a few minutes for everything to install and your virtual env to activate 
+
+Then run :D
+  
 
 __________________Batch Execution Setup (OPTIONAL):__________________
 
