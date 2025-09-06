@@ -16,11 +16,12 @@ __________________Installation and Run Instructions__________________
 
 Clone the repository using gitbash:
 
-git clone https://github.com/iminurcomputerkid/SECURE-ASF-PASSW-MAN.git
+git clone https://github.com/iminurcomputerkid/SECURE-ASH-PASSW-MAN.git
 
 Open in IDE of choice (or nano if you're sligtly insane)
 
 If nano or vim:
+cd SECURE-ASH-PASSW-MAN
 pip install -r requirements.yml
 python3 main.py
 
@@ -45,7 +46,7 @@ a. Create a batch file:
 In your repo folder, create a file named 'run_pwman.bat' with the following content:
 
 @echo off
-REM SECURE ASF PASSW MAN Batch Execution
+REM SECURE ASH PASSW MAN Batch Execution
 python script3.py
 pause
 
