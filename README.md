@@ -27,8 +27,13 @@ python3 main.py
 If IDE:
 Make new virtual environment and install the dependencies in requirements.yml 
 
-For VsCode: (Ctrl+Shift+P), scroll down until you see select python interpreter, Create Environment, Use whatever python installation you want, click requirements when it asks if you'd like to add any dependencies and create it, wait a few minutes for everything to install and your virtual env to activate 
-
+For VsCode: 
+(Ctrl+Shift+P)
+scroll down until you see select python interpreter
+Create Environment
+Use whatever python installation you want
+click requirements when it asks if you'd like to add any dependencies and create it
+wait a few minutes for everything to install and your virtual env to activate 
 Then run :D
   
 
